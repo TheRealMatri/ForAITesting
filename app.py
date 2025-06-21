@@ -109,7 +109,7 @@ MODEL_PATTERNS = {
     'standard': ['', 'стандарт', 'обычный', 'базовый']
 }
 
-MODEL_NUMBER_PATTERN = r'\d{1,2}'
+MODEL_NUMBER_PATTERN = r'\d{1,2,3,4,5,6}'
 
 
 def is_available(availability_str):
