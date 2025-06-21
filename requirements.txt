@@ -4,3 +4,4 @@ python-dotenv
 gspread
 requests
 jellyfish
+gunicorn
