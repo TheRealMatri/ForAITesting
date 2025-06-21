@@ -65,11 +65,9 @@ def load_txt(filename):
         return ""
 
 
-greeting_text = load_txt('greeting.txt') or "Добро пожаловать в JR Store AI Чат!"
-details_text = load_txt('details.txt') or "Мы продаем iPhone с гарантией качества."
-delivery_options_text = load_txt('delivery_options.txt') or (
-    "Выберите способ доставки:\n- Самовывоз\n- Курьерская доставка"
-)
+greeting_text = load_txt('greeting.txt')
+details_text = load_txt('details.txt')
+delivery_options_text = load_txt('delivery_options.txt')
 office_closed_text = load_txt('office_closed_response.txt') or (
     "Наш офис сейчас закрыт. Хотите оформить доставку?"
 )
@@ -94,6 +92,7 @@ class UserState:
         self.context_cut = False
         self.reset_context = False
         self.current_order_step = None
+        self.greeted = False
 
 
 user_states = {}
@@ -484,7 +483,7 @@ def generate_llama_response(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": "Ты консультант магазина WAY Store который продаёт технику Apple. Техника Apple как новая. Отвечай кратко и точно на русском."
+                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая. Отвечай кратко и точно на русском."
             },
             {"role": "user", "content": prompt}
         ],
@@ -515,7 +514,8 @@ def start_chat():
     session_id = str(uuid.uuid4())
     user_states[session_id] = UserState()
     chat_histories[session_id] = []
-    return jsonify({"session_id": session_id, "message": greeting_text})
+    user_states[session_id].greeted = True
+    return jsonify({"session_id": session_id, "messages": [greeting_text, details_text]})
 
 
 @app.route('/send_message', methods=['POST'])
@@ -638,7 +638,8 @@ def handle_product_inquiry(user_input, user_state, session_id):
 
     ai_response = generate_llama_response(prompt)
 
-    if (not is_follow_up and
+    if (not user_state.greeted and
+            not is_follow_up and
             not any(word in user_input.lower() for word in ["нет", "не надо"]) and
             any(model.lower() in user_input.lower() for model in ["iphone", "айфон"])):
         user_state.phase = "product_info"
