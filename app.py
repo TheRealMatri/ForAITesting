@@ -92,8 +92,8 @@ class UserState:
         self.asked_for_details = False
         self.order_confirmed = False
         self.context_cut = False
-        self.current_order_step = None
         self.reset_context = False
+        self.current_order_step = None
 
 
 user_states = {}
@@ -109,7 +109,8 @@ MODEL_PATTERNS = {
     'standard': ['', 'стандарт', 'обычный', 'базовый']
 }
 
-MODEL_NUMBER_PATTERN = r'\d{1,2,3,4,5,6}'
+# Updated to handle iPhone 11-16 models
+MODEL_NUMBER_PATTERN = r'(?<!\d)(1[1-6]|\d)(?!\d)'
 
 
 def is_available(availability_str):
@@ -168,8 +169,8 @@ def normalize_model_name(model_name):
     for key, value in replacements.items():
         model = model.replace(key, value)
 
-    model_number = re.search(MODEL_NUMBER_PATTERN, model)
-    model_number = model_number.group(0) if model_number else ""
+    model_number_match = re.search(MODEL_NUMBER_PATTERN, model)
+    model_number = model_number_match.group(0) if model_number_match else ""
 
     variant = ""
     for var_type, patterns in MODEL_PATTERNS.items():
@@ -232,6 +233,11 @@ def normalize_color(color):
         'розовый': 'розовый',
         'темная ночь': 'синий',
         'звездный свет': 'золотой',
+        'титан': 'титан',
+        'натуральный титан': 'титан',
+        'голубой титан': 'голубой титан',
+        'белый титан': 'белый титан',
+        'чёрный титан': 'чёрный титан',
     }
 
     if color in color_map:
@@ -396,12 +402,13 @@ def format_order_summary(order_data):
 
 def extract_models_from_input(user_input):
     models = []
+    # Updated patterns to handle iPhone 11-16 models
     patterns = [
         r'\b(?:iphone|айфон|phone)\s*(\d{1,2})\s*(pro\s*max|pro|plus|mini|max)?\b',
         r'\b(\d{1,2})\s*(pro\s*max|pro|plus|mini|max|мини|мин|мии|про|плюс)\b',
-        r'\b(\d{1,2})\b',
         r'\b(?:iphone|айфон)\s*(\d{1,2})\b',
-        r'\b(?:айфон|айфона|айфоном)\s*(\d{1,2})\s*(про|макс|мини|плюс)?\b'
+        r'\b(?:айфон|айфона|айфоном)\s*(\d{1,2})\s*(про|макс|мини|плюс)?\b',
+        r'\b(?:iphone|айфон)(\d{1,2})\s*(pro\s*max|pro|plus|mini|max)?\b'
     ]
 
     for pattern in patterns:
