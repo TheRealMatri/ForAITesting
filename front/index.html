@@ -241,6 +241,7 @@
     </div>
 
     <script>
+        const backendUrl = process.env.BACKEND_URL || 'https://foraitesting.onrender.com';
         const chatMessages = document.getElementById('chat-messages');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
@@ -248,6 +249,8 @@
         const typingIndicator = document.getElementById('typing-indicator');
 
         let sessionId = null;
+
+        
 
         startBtn.addEventListener('click', startChat);
         sendBtn.addEventListener('click', sendMessage);
@@ -306,6 +309,15 @@
                 addMessage('Произошла ошибка. Пожалуйста, попробуйте снова.', 'bot');
             });
         }
+
+        // Update fetch calls:
+        fetch(`${backendUrl}/start_chat`, {
+          // ...
+        })
+        
+        fetch(`${backendUrl}/send_message`, {
+          // ...
+        })
 
         function addMessage(text, sender) {
             const messageDiv = document.createElement('div');
