@@ -485,7 +485,7 @@ def generate_llama_response(prompt):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free",
         "messages": [
             {
                 "role": "system",
