@@ -3,17 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iPhone Chatbot</title>
+    <title>iPhone Pro Assistant</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            --secondary-gradient: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            --user-message: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            --bot-message: #ffffff;
+            --background: #f0f5ff;
+            --header-bg: #1a2a6c;
+            --input-bg: #ffffff;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            --light-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            --border-radius: 20px;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
         }
 
         body {
-            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            background: var(--primary-gradient);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -25,49 +39,82 @@
             width: 100%;
             max-width: 500px;
             height: 90vh;
-            background-color: #fff;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
 
         .chat-header {
-            background: linear-gradient(90deg, #1a2a6c, #b21f1f, #1a2a6c);
+            background: var(--header-bg);
             color: white;
             padding: 20px;
             text-align: center;
             position: relative;
+            z-index: 10;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
 
         .chat-header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
         }
 
         .chat-header p {
             font-size: 0.9rem;
-            opacity: 0.8;
+            opacity: 0.85;
             margin-top: 5px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background-color: #4caf50;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
         }
 
         .chat-messages {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
-            background: #f0f5ff;
+            background: var(--background);
             display: flex;
             flex-direction: column;
             gap: 15px;
+            background-image: radial-gradient(#e0e7ff 1px, transparent 1px);
+            background-size: 20px 20px;
+            position: relative;
         }
 
         .message {
-            max-width: 80%;
-            padding: 12px 16px;
-            border-radius: 18px;
+            max-width: 85%;
+            padding: 15px 18px;
+            border-radius: 22px;
             position: relative;
             animation: fadeIn 0.3s ease;
+            box-shadow: var(--light-shadow);
+            line-height: 1.5;
+            font-size: 1.02rem;
+            word-wrap: break-word;
+            transition: transform 0.2s;
+        }
+
+        .message:hover {
+            transform: translateY(-2px);
         }
 
         @keyframes fadeIn {
@@ -77,139 +124,211 @@
 
         .user-message {
             align-self: flex-end;
-            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            background: var(--user-message);
             color: white;
-            border-bottom-right-radius: 5px;
+            border-bottom-right-radius: 8px;
         }
 
         .bot-message {
             align-self: flex-start;
-            background: white;
+            background: var(--bot-message);
             color: #333;
             border: 1px solid #e0e0e0;
-            border-bottom-left-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border-bottom-left-radius: 8px;
         }
 
         .order-summary {
             background: #e8f4ff;
             border-left: 4px solid #4776E6;
             padding: 15px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-top: 10px;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+        }
+
+        .chat-input-area {
+            display: flex;
+            padding: 15px;
+            background: var(--input-bg);
+            border-top: 1px solid #e0e0e0;
+            position: relative;
+            z-index: 10;
         }
 
         .chat-input {
+            flex: 1;
             display: flex;
-            padding: 15px;
-            background: white;
-            border-top: 1px solid #eee;
+            background: #f5f7ff;
+            border-radius: 30px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
         }
 
         .chat-input input {
             flex: 1;
-            padding: 12px 20px;
-            border: 2px solid #e0e0e0;
-            border-radius: 30px;
+            padding: 14px 20px;
+            border: none;
+            background: transparent;
             outline: none;
             font-size: 1rem;
-            transition: border-color 0.3s;
+            color: #333;
         }
 
-        .chat-input input:focus {
-            border-color: #4776E6;
+        .chat-input input::placeholder {
+            color: #888;
         }
 
         .chat-input button {
-            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            background: var(--secondary-gradient);
             color: white;
             border: none;
-            border-radius: 30px;
-            padding: 12px 25px;
-            margin-left: 10px;
+            padding: 0 25px;
             cursor: pointer;
             font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all 0.3s;
         }
 
         .chat-input button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            opacity: 0.9;
         }
 
-        .chat-input button:active {
-            transform: translateY(0);
+        .chat-input button i {
+            font-size: 1.2rem;
         }
 
         .typing-indicator {
             display: none;
             align-self: flex-start;
             background: white;
-            padding: 12px 16px;
-            border-radius: 18px;
-            border-bottom-left-radius: 5px;
+            padding: 12px 18px;
+            border-radius: 22px;
+            border-bottom-left-radius: 8px;
             margin-bottom: 15px;
+            box-shadow: var(--light-shadow);
         }
 
         .typing-indicator span {
             height: 8px;
             width: 8px;
             float: left;
-            margin: 0 2px;
-            background-color: #9E9EA1;
+            margin: 0 3px;
+            background-color: #6a11cb;
             display: block;
             border-radius: 50%;
-            opacity: 0.4;
+            opacity: 0.6;
         }
 
         .typing-indicator span:nth-of-type(1) {
-            animation: typing 1s infinite;
+            animation: typing 1.2s infinite;
         }
 
         .typing-indicator span:nth-of-type(2) {
-            animation: typing 1s infinite 0.2s;
+            animation: typing 1.2s infinite 0.2s;
         }
 
         .typing-indicator span:nth-of-type(3) {
-            animation: typing 1s infinite 0.4s;
+            animation: typing 1.2s infinite 0.4s;
         }
 
         @keyframes typing {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+            0%, 100% { transform: translateY(0); opacity: 0.6; }
+            50% { transform: translateY(-5px); opacity: 1; }
         }
 
         .welcome-message {
             text-align: center;
-            padding: 20px;
+            padding: 30px 20px;
             color: #666;
-            font-size: 0.9rem;
+            font-size: 1rem;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            margin: 20px;
+            box-shadow: var(--light-shadow);
         }
 
-        .product-image {
-            max-width: 150px;
-            border-radius: 10px;
+        .product-suggestion {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
             margin-top: 10px;
-            display: block;
+        }
+
+        .suggestion-chip {
+            background: #e0e7ff;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chip:hover {
+            background: #d0d7ff;
+            transform: translateY(-2px);
+        }
+
+        .action-button {
+            display: inline-block;
+            background: var(--secondary-gradient);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            margin-top: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            border-radius: 50%;
+            animation: confetti-fall 5s linear forwards;
+        }
+
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
 
         @media (max-width: 600px) {
             .chat-container {
                 height: 95vh;
-                border-radius: 15px;
+                border-radius: 18px;
             }
-
+            
             .chat-header {
                 padding: 15px;
             }
-
+            
+            .chat-header h1 {
+                font-size: 1.5rem;
+            }
+            
             .chat-messages {
                 padding: 15px;
             }
-
+            
             .message {
                 max-width: 90%;
+                padding: 12px 16px;
+                font-size: 1rem;
+            }
+            
+            .chat-input-area {
+                padding: 12px;
+            }
+            
+            .chat-input input {
+                padding: 12px 15px;
             }
         }
     </style>
@@ -217,13 +336,18 @@
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>iPhone ИИ</h1>
-            <p>Ваш персональный помощник по выбору iPhone</p>
+            <h1><span class="status-indicator"></span> iPhone Pro Assistant</h1>
+            <p>Ваш персональный AI-консультант по iPhone</p>
         </div>
 
         <div class="chat-messages" id="chat-messages">
             <div class="welcome-message">
-                Нажмите "Начать чат" для консультации по iPhone
+                <p>Добро пожаловать! Я помогу вам выбрать идеальный iPhone</p>
+                <div class="product-suggestion">
+                    <div class="suggestion-chip">iPhone 15 Pro</div>
+                    <div class="suggestion-chip">iPhone 14</div>
+                    <div class="suggestion-chip">iPhone 13 mini</div>
+                </div>
             </div>
         </div>
 
@@ -233,10 +357,11 @@
             <span></span>
         </div>
 
-        <div class="chat-input">
-            <input type="text" id="user-input" placeholder="Напишите сообщение..." disabled>
-            <button id="start-btn">Начать чат</button>
-            <button id="send-btn" style="display: none;">Отправить</button>
+        <div class="chat-input-area">
+            <div class="chat-input">
+                <input type="text" id="user-input" placeholder="Напишите сообщение...">
+                <button id="send-btn"><i class="fas fa-paper-plane"></i></button>
+            </div>
         </div>
     </div>
 
@@ -244,12 +369,16 @@
         const chatMessages = document.getElementById('chat-messages');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-        const startBtn = document.getElementById('start-btn');
         const typingIndicator = document.getElementById('typing-indicator');
 
         let sessionId = null;
+        let isFirstInteraction = true;
 
-        startBtn.addEventListener('click', startChat);
+        // Start chat automatically
+        document.addEventListener('DOMContentLoaded', function() {
+            startChat();
+        });
+
         sendBtn.addEventListener('click', sendMessage);
         userInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
@@ -257,9 +386,15 @@
             }
         });
 
+        // Add suggestion chips event listeners
+        document.querySelectorAll('.suggestion-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                userInput.value = this.textContent;
+                sendMessage();
+            });
+        });
+
         function startChat() {
-            startBtn.style.display = 'none';
-            sendBtn.style.display = 'block';
             userInput.disabled = false;
             userInput.focus();
 
@@ -269,7 +404,8 @@
             .then(response => response.json())
             .then(data => {
                 sessionId = data.session_id;
-                addMessage(data.message, 'bot');
+                // Add both greeting and details as separate messages
+                data.messages.forEach(msg => addMessage(msg, 'bot'));
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -298,7 +434,18 @@
             .then(response => response.json())
             .then(data => {
                 hideTyping();
+                
+                if (isFirstInteraction) {
+                    document.querySelector('.welcome-message')?.remove();
+                    isFirstInteraction = false;
+                }
+                
                 addMessage(data.message, 'bot');
+                
+                // Add confetti for order completion
+                if (data.message.includes('✅ Заказ оформлен')) {
+                    createConfetti();
+                }
             })
             .catch(error => {
                 hideTyping();
@@ -308,6 +455,11 @@
         }
 
         function addMessage(text, sender) {
+            // Clear welcome message on first bot message
+            if(sender === 'bot' && document.querySelector('.welcome-message')) {
+                document.querySelector('.welcome-message').remove();
+            }
+            
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message');
             messageDiv.classList.add(sender + '-message');
@@ -315,8 +467,8 @@
             // Check for order summary pattern
             if (text.includes('📝 Ваш заказ:')) {
                 const lines = text.split('\n');
-                let formattedText = '';
-
+                let formattedText = '<div class="order-summary">';
+                
                 for (let i = 0; i < lines.length; i++) {
                     if (lines[i].startsWith('•')) {
                         formattedText += `<div>${lines[i]}</div>`;
@@ -324,9 +476,65 @@
                         formattedText += lines[i] + '<br>';
                     }
                 }
-
+                
+                formattedText += '</div>';
                 messageDiv.innerHTML = formattedText;
-            } else {
+            } 
+            // Add action buttons for confirmation
+            else if (text.includes('(Да/Нет)')) {
+                messageDiv.innerHTML = text.replace(/\n/g, '<br>');
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.marginTop = '10px';
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '10px';
+                
+                const yesBtn = document.createElement('div');
+                yesBtn.className = 'action-button';
+                yesBtn.textContent = 'Да';
+                yesBtn.onclick = function() {
+                    userInput.value = 'Да';
+                    sendMessage();
+                };
+                
+                const noBtn = document.createElement('div');
+                noBtn.className = 'action-button';
+                noBtn.textContent = 'Нет';
+                noBtn.onclick = function() {
+                    userInput.value = 'Нет';
+                    sendMessage();
+                };
+                
+                buttonContainer.appendChild(yesBtn);
+                buttonContainer.appendChild(noBtn);
+                messageDiv.appendChild(buttonContainer);
+            } 
+            // Add quick suggestions
+            else if (text.includes('Выберите') || text.includes('Укажите')) {
+                messageDiv.innerHTML = text.replace(/\n/g, '<br>');
+                
+                // Extract options from text
+                const options = text.match(/(\d+\.\s*[^\n]+)|([А-Яа-я]+:\s*[^\n]+)/g);
+                if (options) {
+                    const suggestionContainer = document.createElement('div');
+                    suggestionContainer.className = 'product-suggestion';
+                    suggestionContainer.style.marginTop = '12px';
+                    
+                    options.forEach(option => {
+                        const cleanOption = option.replace(/^\d+\.\s*/, '');
+                        const chip = document.createElement('div');
+                        chip.className = 'suggestion-chip';
+                        chip.textContent = cleanOption;
+                        chip.onclick = function() {
+                            userInput.value = cleanOption;
+                            sendMessage();
+                        };
+                        suggestionContainer.appendChild(chip);
+                    });
+                    
+                    messageDiv.appendChild(suggestionContainer);
+                }
+            }
+            else {
                 // Simple formatting for new lines
                 messageDiv.innerHTML = text.replace(/\n/g, '<br>');
             }
@@ -342,6 +550,25 @@
 
         function hideTyping() {
             typingIndicator.style.display = 'none';
+        }
+        
+        function createConfetti() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.width = Math.random() * 10 + 5 + 'px';
+                confetti.style.height = Math.random() * 10 + 5 + 'px';
+                confetti.style.animationDuration = Math.random() * 3 + 2 + 's';
+                document.body.appendChild(confetti);
+                
+                // Remove after animation
+                setTimeout(() => {
+                    confetti.remove();
+                }, 5000);
+            }
         }
     </script>
 </body>
