@@ -33,7 +33,6 @@ SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
 # Setup Flask app
 app = Flask(__name__)
 CORS(app)
-app.secret_key = 'supersecretkey'
 
 # Google Sheets Setup
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
