@@ -493,7 +493,7 @@ def generate_llama_response(prompt):
             },
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.3,
+        "temperature": 0.4,
         "max_tokens": 300
     }
 
