@@ -32,7 +32,7 @@ SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
 
 # Setup Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "https://sitetest-76es.onrender.com"}})
 
 # Google Sheets Setup
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
