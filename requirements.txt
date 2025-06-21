@@ -4,4 +4,3 @@ python-dotenv
 gspread
 requests
 jellyfish
-difflib
