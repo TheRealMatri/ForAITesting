@@ -508,7 +508,7 @@ def start_chat():
     session_id = str(uuid.uuid4())
     user_states[session_id] = UserState()
     chat_histories[session_id] = []
-    return jsonify({"session_id": session_id, "message": greeting_text, details_text})
+    return jsonify({"session_id": session_id, "message": greeting_text, "message": details_text})
 
 
 @app.route('/send_message', methods=['POST'])
