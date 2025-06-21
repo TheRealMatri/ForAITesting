@@ -483,7 +483,7 @@ def generate_llama_response(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая. Отвечай кратко и точно на русском."
+                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая,  но не новая! Отвечай кратко и точно на русском."
             },
             {"role": "user", "content": prompt}
         ],
