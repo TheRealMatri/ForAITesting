@@ -65,9 +65,9 @@ def load_txt(filename):
         return ""
 
 
-greeting_text = load_txt('greeting.txt') or
-details_text = load_txt('details.txt') or
-delivery_options_text = load_txt('delivery_options.txt') or
+greeting_text = load_txt('greeting.txt') or "Привет! Я ваш помощник по iPhone. Чем могу помочь?"
+details_text = load_txt('details.txt') or "У нас есть широкий выбор iPhone по отличным ценам!"
+delivery_options_text = load_txt('delivery_options.txt') or "Выберите способ доставки:\n1. Самовывоз\n2. Курьерская доставка"
 office_closed_text = load_txt('office_closed_response.txt') or (
     "Наш офис сейчас закрыт. Хотите оформить доставку?"
 )
@@ -93,6 +93,7 @@ class UserState:
         self.reset_context = False
         self.current_order_step = None
         self.greeted = False
+        self.order_intent_detected = False
 
 
 user_states = {}
@@ -108,8 +109,7 @@ MODEL_PATTERNS = {
     'standard': ['', 'стандарт', 'обычный', 'базовый']
 }
 
-# Updated to handle iPhone 11-16 models
-MODEL_NUMBER_PATTERN = r'(?<!\d)(1[1-6]|\d)(?!\d)'
+MODEL_NUMBER_PATTERN = r'(?<!\d)(1[1-6]|\d{1,2})(?!\d)'
 
 
 def is_available(availability_str):
@@ -196,6 +196,8 @@ def normalize_storage(storage):
         return ""
     if isinstance(storage, str):
         storage_num = re.sub(r'[^0-9]', '', storage)
+        if storage_num == "1024":
+            return "1TB"
         return f"{storage_num} ГБ" if storage_num else ""
     return f"{storage} ГБ"
 
@@ -299,7 +301,12 @@ def find_matching_products(products, model=None, storage=None, color=None):
 
 def get_available_products():
     try:
-        return product_sheet.get_all_records()
+        products = product_sheet.get_all_records()
+        # Convert 1024 GB to 1TB
+        for product in products:
+            if normalize_storage(product.get('Объём', '')) == "1024 ГБ":
+                product['Объём'] = "1TB"
+        return products
     except Exception as e:
         logger.error(f"Product fetch error: {str(e)}")
         return []
@@ -388,20 +395,19 @@ def find_similar_models(user_input, available_models):
 
 
 def format_order_summary(order_data):
-    summary = "📝 Ваш заказ:\n"
-    summary += f"• Модель: {order_data['Модель']}\n"
-    summary += f"• Объём: {order_data['Объём']}\n"
-    summary += f"• Цвет: {order_data['Цвет']}\n"
-    summary += f"• Зарядный блок: {order_data['Зарядный блок']}\n"
-    summary += f"• Доставка: {order_data['Доставка']}\n"
-    summary += f"• ФИО: {order_data['ФИО']}\n"
-    summary += f"• Контакт: {order_data['Контакт']}"
+    summary = "📝 <b>Ваш заказ:</b>\n"
+    summary += f"• <b>Модель:</b> {order_data['Модель']}\n"
+    summary += f"• <b>Объём:</b> {order_data['Объём']}\n"
+    summary += f"• <b>Цвет:</b> {order_data['Цвет']}\n"
+    summary += f"• <b>Зарядный блок:</b> {order_data['Зарядный блок']}\n"
+    summary += f"• <b>Доставка:</b> {order_data['Доставка']}\n"
+    summary += f"• <b>ФИО:</b> {order_data['ФИО']}\n"
+    summary += f"• <b>Контакт:</b> {order_data['Контакт']}"
     return summary
 
 
 def extract_models_from_input(user_input):
     models = []
-    # Updated patterns to handle iPhone 11-16 models
     patterns = [
         r'\b(?:iphone|айфон|phone)\s*(\d{1,2})\s*(pro\s*max|pro|plus|mini|max)?\b',
         r'\b(\d{1,2})\s*(pro\s*max|pro|plus|mini|max|мини|мин|мии|про|плюс)\b',
@@ -503,6 +509,23 @@ def generate_llama_response(prompt):
         return "Извините, не могу обработать запрос. Попробуйте позже."
 
 
+def classify_order_intent(user_input, context):
+    """Use NLP to determine if user wants to start an order"""
+    prompt = f"""
+    Контекст разговора: {context}
+    Последнее сообщение пользователя: {user_input}
+    
+    Определи намерение пользователя:
+    1. Заказ - если пользователь хочет купить/заказать iPhone
+    2. Вопрос - если пользователь спрашивает о товаре
+    
+    Ответь ТОЛЬКО одним словом: "Заказ" или "Вопрос"
+    """
+    
+    response = generate_llama_response(prompt)
+    return "заказ" in response.lower()
+
+
 # New routes for web chat interface
 @app.route('/')
 def chat_interface():
@@ -515,7 +538,10 @@ def start_chat():
     user_states[session_id] = UserState()
     chat_histories[session_id] = []
     user_states[session_id].greeted = True
-    return jsonify({"session_id": session_id, "messages": [greeting_text, details_text]})
+    return jsonify({
+        "session_id": session_id, 
+        "messages": [greeting_text, details_text]
+    })
 
 
 @app.route('/send_message', methods=['POST'])
@@ -554,6 +580,8 @@ def send_message():
     # Route to appropriate handler
     if user_state.phase == "init":
         response = handle_product_inquiry(user_input, user_state, session_id)
+    elif user_state.phase == "order_confirmation":
+        response = handle_order_confirmation(user_input, user_state)
     elif user_state.phase == "product_info":
         response = handle_product_info_response(user_input, user_state, session_id)
     elif user_state.phase == "delivery_selection":
@@ -605,9 +633,29 @@ def handle_complete_phase(user_input, user_state, session_id):
 
 
 def handle_product_inquiry(user_input, user_state, session_id):
-    if any(word in user_input.lower() for word in ["заказать", "оформить", "купить", "хочу iphone"]):
-        user_state.phase = "delivery_selection"
-        return delivery_options_text
+    user_state.greeted = True
+    
+    # Get conversation context
+    prev_messages = chat_histories.get(session_id, [])
+    context = " ".join(
+        [msg['content'] for msg in prev_messages[-4:] if msg['role'] == 'user']
+    )
+    
+    # Advanced NLP intent recognition
+    wants_to_order = classify_order_intent(user_input, context)
+    
+    if wants_to_order and not user_state.order_intent_detected:
+        # Extract mentioned model from context
+        mentioned_models = extract_models_from_input(context + " " + user_input)
+        if mentioned_models:
+            model = mentioned_models[0]
+            user_state.order_data["Модель"] = model
+            user_state.order_intent_detected = True
+            user_state.phase = "order_confirmation"
+            return f"Вы хотите заказать {model}? (Да/Нет)"
+        else:
+            user_state.order_intent_detected = True
+            return "Какую модель iPhone вы хотели бы заказать?"
 
     products = get_available_products()
     prev_messages = chat_histories.get(session_id, [])
@@ -648,6 +696,18 @@ def handle_product_inquiry(user_input, user_state, session_id):
     else:
         user_state.phase = "init"
         return ai_response
+
+
+def handle_order_confirmation(user_input, user_state):
+    if user_input.lower() in ["да", "yes", "д"]:
+        user_state.phase = "delivery_selection"
+        return delivery_options_text
+    elif user_input.lower() in ["нет", "no", "н"]:
+        user_state.phase = "init"
+        user_state.order_intent_detected = False
+        return "Хорошо, чем еще могу помочь?"
+    else:
+        return "Пожалуйста, ответьте Да или Нет:"
 
 
 def handle_product_info_response(user_input, user_state, session_id):
