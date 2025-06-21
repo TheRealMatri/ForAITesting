@@ -65,9 +65,11 @@ def load_txt(filename):
         return ""
 
 
-greeting_text = load_txt('greeting.txt')
-details_text = load_txt('details.txt')
-delivery_options_text = load_txt('delivery_options.txt')
+greeting_text = load_txt('greeting.txt') or "Добро пожаловать в JR Store AI Чат!"
+details_text = load_txt('details.txt') or "Мы продаем iPhone с гарантией качества."
+delivery_options_text = load_txt('delivery_options.txt') or (
+    "Выберите способ доставки:\n- Самовывоз\n- Курьерская доставка"
+)
 office_closed_text = load_txt('office_closed_response.txt') or (
     "Наш офис сейчас закрыт. Хотите оформить доставку?"
 )
@@ -483,7 +485,7 @@ def generate_llama_response(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая. Отвечай кратко и точно на русском."
+                "content": "Ты консультант магазина WAY Store который продаёт технику Apple. Техника Apple как новая. Отвечай кратко и точно на русском."
             },
             {"role": "user", "content": prompt}
         ],
