@@ -560,7 +560,7 @@ def generate_llama_response(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая, но не новая! Отвечай кратко и точно на русском, только готовым ответом для клиента без внутренних размышлений."
+                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая, но не новая! Отвечай кратко и точно на русском. Только готовым ответом для клиента без внутренних размышлений!"
             },
             {"role": "user", "content": prompt}
         ],
@@ -773,8 +773,9 @@ def handle_product_inquiry(user_input, user_state, session_id):
     prompt = f"""
     [ИНСТРУКЦИИ]
     Ты консультант магазина. Отвечай только готовым ответом для клиента без внутренних размышлений.
-    - Отвечай кратко (1-2 предложения)
-    - Используй дружелюбный тон с эмодзи
+    Отвечай на русском. Только готовым ответом для клиента без внутренних размышлений!
+    - Отвечай кратко (1-3 предложения)
+    - Используй дружелюбный тон с эмодзи иногда
     - Не упоминай, что ты ИИ
     - Опирайся только на доступные модели: {models_list}
     
@@ -835,8 +836,9 @@ def handle_product_info_response(user_input, user_state, session_id):
 
     prompt = f"""
     [ИНСТРУКЦИИ]
+    Отвечай на русском. Только готовым ответом для клиента без внутренних размышлений!
     Ты эксперт по iPhone. Предоставь краткую информацию о модели без внутренних размышлений.
-    - Отвечай 1-2 предложениями
+    - Отвечай 1-3 предложениями
     - Добавь позитивный отзыв о модели
     - Предложи оформить заказ в конце
     - Доступные модели: {models_list}
@@ -899,7 +901,7 @@ def handle_order_form_step(user_input, user_state, session_id):
         formatted_name = " ".join([part.capitalize() for part in name_parts])
         user_state.order_data["ФИО"] = formatted_name
         user_state.current_order_step = "contact"
-        return "Укажите ваш телефон (в формате +79991234567) или Telegram username (в формате @username):"
+        return "Укажите ваш телефон (в формате +7XXXXXXXXXX) или Telegram username (в формате @username):"
 
     elif user_state.current_order_step == "contact":
         phone_match = re.match(r'^(\+7|7|8)?(\d{10})$', user_input)
@@ -914,7 +916,7 @@ def handle_order_form_step(user_input, user_state, session_id):
                 telegram = "@" + telegram
             user_state.order_data["Контакт"] = telegram
         else:
-            return "Пожалуйста, укажите корректный телефон (+79991234567) или Telegram (@username):"
+            return "Пожалуйста, укажите корректный телефон (+7XXXXXXXXXX) или Telegram (@username):"
 
         user_state.current_order_step = "model"
         return "Укажите модель iPhone, которую вы хотите заказать:"
