@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import logging
 import difflib
 import uuid
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -36,24 +37,55 @@ CORS(app, resources={r"/*": {"origins": "https://sitetest-76es.onrender.com"}})
 
 # Google Sheets Setup
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
-try:
-    # Parse service account JSON from environment variable
-    service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
-    credentials = Credentials.from_service_account_info(
-        service_account_info,
-        scopes=scopes
-    )
-    gc = gspread.authorize(credentials)
+service_account_info = None
+gc = None
+product_sheet = None
+office_sheet = None
+order_sheet = None
 
-    # Initialize sheets
-    product_sheet = gc.open_by_url(PRODUCT_SHEET_URL).sheet1
-    office_sheet = gc.open_by_url(OFFICE_STATUS_SHEET_URL).sheet1
-    order_sheet = gc.open_by_url(ORDER_SHEET_URL).sheet1
-    logger.info("Successfully connected to Google Sheets")
-except Exception as e:
-    logger.error(f"Google Sheets connection failed: {str(e)}")
+def initialize_google_sheets():
+    global service_account_info, gc, product_sheet, office_sheet, order_sheet
+    try:
+        # Parse service account JSON from environment variable
+        service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
+        credentials = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=scopes
+        )
+        gc = gspread.authorize(credentials)
+
+        # Initialize sheets with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Open by URL with error handling
+                product_sheet = gc.open_by_url(PRODUCT_SHEET_URL).sheet1
+                office_sheet = gc.open_by_url(OFFICE_STATUS_SHEET_URL).sheet1
+                order_sheet = gc.open_by_url(ORDER_SHEET_URL).sheet1
+                logger.info("Successfully connected to Google Sheets")
+                return True
+            except gspread.exceptions.APIError as e:
+                logger.warning(f"Google Sheets API error (attempt {attempt+1}): {str(e)}")
+                if "RESOURCE_EXHAUSTED" in str(e):
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    logger.info(f"Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                else:
+                    raise
+        logger.error("Google Sheets connection failed after multiple retries")
+        return False
+    except Exception as e:
+        logger.error(f"Google Sheets connection failed: {str(e)}")
+        return False
+
+# Initialize Google Sheets connection
+if not initialize_google_sheets():
     exit(1)
 
+# Product caching with automatic refresh
+PRODUCT_CACHE = None
+PRODUCT_CACHE_TIME = None
+CACHE_DURATION = 300  # 5 minutes
 
 # Static Texts
 def load_txt(filename):
@@ -63,7 +95,6 @@ def load_txt(filename):
     except FileNotFoundError:
         logger.warning(f"File {filename} not found, using default text")
         return ""
-
 
 # Load multiple details files
 greeting_text = load_txt('greeting.txt') or "Привет! Я ваш помощник по iPhone. Чем могу помочь?"
@@ -76,7 +107,6 @@ delivery_options_text = load_txt('delivery_options.txt') or "Выберите с
 office_closed_text = load_txt('office_closed_response.txt') or (
     "Наш офис сейчас закрыт. Хотите оформить доставку?"
 )
-
 
 # State Management
 class UserState:
@@ -200,6 +230,14 @@ def normalize_storage(storage):
     if not storage:
         return ""
     if isinstance(storage, str):
+        storage = storage.lower()
+        # Handle TB conversions
+        if 'tb' in storage or 'тб' in storage:
+            storage_num = re.sub(r'[^0-9]', '', storage)
+            if storage_num == "1024" or storage_num == "1":
+                return "1TB"
+            return f"{storage_num}TB"
+        
         storage_num = re.sub(r'[^0-9]', '', storage)
         if storage_num == "1024":
             return "1TB"
@@ -305,16 +343,36 @@ def find_matching_products(products, model=None, storage=None, color=None):
 
 
 def get_available_products():
+    global PRODUCT_CACHE, PRODUCT_CACHE_TIME
+    
+    # Return cached data if recent
+    now = datetime.now()
+    if (PRODUCT_CACHE and PRODUCT_CACHE_TIME and 
+        (now - PRODUCT_CACHE_TIME).seconds < CACHE_DURATION):
+        return PRODUCT_CACHE
+    
     try:
         products = product_sheet.get_all_records()
-        # Convert 1024 GB to 1TB
+        # Convert 1024 GB to 1TB and handle other storage formats
         for product in products:
-            if normalize_storage(product.get('Объём', '')) == "1024 ГБ":
-                product['Объём'] = "1TB"
+            storage = product.get('Объём', '')
+            normalized = normalize_storage(storage)
+            if normalized != storage:
+                product['Объём'] = normalized
+        
+        PRODUCT_CACHE = products
+        PRODUCT_CACHE_TIME = now
+        logger.info(f"Loaded {len(products)} products from Google Sheets")
+        if products:
+            logger.info(f"Sample product: {products[0]}")
         return products
     except Exception as e:
         logger.error(f"Product fetch error: {str(e)}")
-        return []
+        # Try to reinitialize connection
+        if "RESOURCE_EXHAUSTED" in str(e) or "UNAUTHENTICATED" in str(e):
+            logger.warning("Reinitializing Google Sheets connection")
+            initialize_google_sheets()
+        return PRODUCT_CACHE or []  # Return stale cache if available
 
 
 def get_available_models(products=None):
@@ -462,6 +520,10 @@ def get_office_status():
         return records[0]['Состояние'] if records else "Неизвестно"
     except Exception as e:
         logger.error(f"Office status error: {str(e)}")
+        # Try to reinitialize connection
+        if "RESOURCE_EXHAUSTED" in str(e) or "UNAUTHENTICATED" in str(e):
+            logger.warning("Reinitializing Google Sheets connection")
+            initialize_google_sheets()
         return "Неизвестно"
 
 
@@ -480,6 +542,10 @@ def submit_order(data):
         return True
     except Exception as e:
         logger.error(f"Order submission error: {str(e)}")
+        # Try to reinitialize connection
+        if "RESOURCE_EXHAUSTED" in str(e) or "UNAUTHENTICATED" in str(e):
+            logger.warning("Reinitializing Google Sheets connection")
+            initialize_google_sheets()
         return False
 
 
@@ -494,7 +560,7 @@ def generate_llama_response(prompt):
         "messages": [
             {
                 "role": "system",
-                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая,  но не новая! Отвечай кратко и точно на русском."
+                "content": "Ты консультант магазина WAY PHONE который продаёт технику Apple. Техника Apple как новая, но не новая! Отвечай кратко и точно на русском, только готовым ответом для клиента без внутренних размышлений."
             },
             {"role": "user", "content": prompt}
         ],
@@ -502,29 +568,49 @@ def generate_llama_response(prompt):
         "max_tokens": 300
     }
 
-    try:
-        logger.info("Sending request to AI model")
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"].strip()
-        logger.info(f"AI response: {content}")
-        return content
-    except Exception as e:
-        logger.error(f"AI error: {str(e)}")
-        return "Извините, не могу обработать запрос. Попробуйте позже."
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Sending request to AI model (attempt {attempt+1})")
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            logger.info(f"AI response: {content}")
+            
+            # Remove any internal thinking prefixes
+            if content.startswith("Хорошо,") or content.startswith("Итак,"):
+                content = re.sub(r'^(Хорошо, |Итак, |Окей, )', '', content)
+            
+            return content
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 429:  # Rate limit
+                logger.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error(f"HTTP error: {str(e)}")
+                return "Извините, временные технические трудности. Попробуйте позже."
+        except Exception as e:
+            logger.error(f"AI error: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay *= 2
+            else:
+                return "Извините, не могу обработать запрос. Попробуйте позже."
+    return "Извините, сервис временно недоступен. Попробуйте через несколько минут."
 
 
 def classify_order_intent(user_input, context):
     """Use NLP to determine if user wants to start an order"""
     prompt = f"""
-    Контекст разговора: {context}
-    Последнее сообщение пользователя: {user_input}
+    [КОНТЕКСТ]: {context}
+    [СООБЩЕНИЕ]: {user_input}
     
-    Определи намерение пользователя:
-    1. Заказ - если пользователь хочет купить/заказать iPhone
-    2. Вопрос - если пользователь спрашивает о товаре
-    
-    Ответь ТОЛЬКО одним словом: "Заказ" или "Вопрос"
+    Определи намерение одним словом (Заказ или Вопрос):
+    - Заказ: если хочет купить/заказать
+    - Вопрос: если спрашивает информацию
     """
     
     response = generate_llama_response(prompt)
@@ -543,6 +629,9 @@ def start_chat():
     user_states[session_id] = UserState()
     chat_histories[session_id] = []
     user_states[session_id].greeted = True
+    
+    # Preload products to warm up cache
+    get_available_products()
     
     # Create messages array with greeting + all details texts
     messages = [greeting_text] + details_texts
@@ -667,6 +756,7 @@ def handle_product_inquiry(user_input, user_state, session_id):
             return "Какую модель iPhone вы хотели бы заказать?"
 
     products = get_available_products()
+    available_models = get_available_models(products)
     prev_messages = chat_histories.get(session_id, [])
 
     is_follow_up = any(
@@ -675,22 +765,21 @@ def handle_product_inquiry(user_input, user_state, session_id):
         if msg['role'] == 'assistant'
     )
 
-    prompt = f"""
-    Пользователь спрашивает: {user_input}
-    Доступные товары: {json.dumps(products, ensure_ascii=False)[:1000]}...
-    Предыдущий диалог: {json.dumps(prev_messages[-2:], ensure_ascii=False) if prev_messages else 'Нет'}
+    # Create a concise list of available models for the prompt
+    models_list = ", ".join(available_models[:5])  # Show first 5 models
+    if len(available_models) > 5:
+        models_list += f" и ещё {len(available_models)-5} моделей"
 
-    Ответь как живой консультант магазина:
-    1. Веди себя реалистично как человек
-    2. Добавляй эмодзи где уместно
-    3. Допускай неформальные сокращения
-    4. Сохраняй легкую эмоциональную окраску
-    5. Добавляй персонализированные комментарии
-    6. Держи ответ в 1-2 предложения
-    7. Никогда не упоминай что ты ИИ
-    8. Не отсылайся на другие источники
-    9. Твоя цель продать айфон
-    10. Не предлагай дополнительные аксессуары
+    prompt = f"""
+    [ИНСТРУКЦИИ]
+    Ты консультант магазина. Отвечай только готовым ответом для клиента без внутренних размышлений.
+    - Отвечай кратко (1-2 предложения)
+    - Используй дружелюбный тон с эмодзи
+    - Не упоминай, что ты ИИ
+    - Опирайся только на доступные модели: {models_list}
+    
+    [ЗАПРОС]
+    Клиент спрашивает: {user_input}
     """
 
     ai_response = generate_llama_response(prompt)
@@ -737,19 +826,23 @@ def handle_product_info_response(user_input, user_state, session_id):
         ).strip()
 
     products = get_available_products()
+    available_models = get_available_models(products)
+
+    # Create a concise list of available models for the prompt
+    models_list = ", ".join(available_models[:5])  # Show first 5 models
+    if len(available_models) > 5:
+        models_list += f" и ещё {len(available_models)-5} моделей"
 
     prompt = f"""
-    Пользователь хочет подробности о: {model_query}
-    Доступные товары: {json.dumps(products, ensure_ascii=False)[:1000]}...
-
-    Ответь как эксперт-продажник:
-    1. Начни с позитивного отклика
-    2. Используй сравнения
-    3. Добавь личное мнение
-    4. Заверши мягким призывом к действию
-    5. Сохраняй естественную пунктуацию
-    6. Максимум 3 предложения
-    7. Не предлагай дополнительные аксессуары
+    [ИНСТРУКЦИИ]
+    Ты эксперт по iPhone. Предоставь краткую информацию о модели без внутренних размышлений.
+    - Отвечай 1-2 предложениями
+    - Добавь позитивный отзыв о модели
+    - Предложи оформить заказ в конце
+    - Доступные модели: {models_list}
+    
+    [ЗАПРОС]
+    Клиент спрашивает про: {model_query}
     """
 
     ai_response = generate_llama_response(prompt)
