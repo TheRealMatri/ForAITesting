@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>iPhone Pro Assistant</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -19,22 +18,93 @@
             --light-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             --border-radius: 20px;
         }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body, html {
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
         body {
-            background: var(--primary-gradient);
+            background: #0a2e1a;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            padding: 20px;
-            background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb');
-            background-size: cover;
-            background-position: center;
-            backdrop-filter: blur(2px);
+            padding: 10px;
         }
+        
+        #forest-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(135deg, #0a2e1a 0%, #1a5c2e 100%);
+            overflow: hidden;
+        }
+        
+        .forest-layer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background-size: auto 100%;
+            background-repeat: repeat-x;
+            animation-duration: 30s;
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+            opacity: 0.5;
+        }
+        
+        .layer-1 {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><path d="M0,100 C50,60 100,70 150,40 C180,20 200,40 200,100 L0,100 Z" fill="%231e7a3d"/></svg>');
+            animation-name: forestMove1;
+            height: 40%;
+            z-index: 1;
+        }
+        
+        .layer-2 {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><path d="M0,100 C30,70 70,50 120,30 C150,10 180,20 200,100 L0,100 Z" fill="%232b8a3e"/></svg>');
+            animation-name: forestMove2;
+            height: 60%;
+            z-index: 2;
+        }
+        
+        .layer-3 {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><path d="M0,100 C40,80 90,50 140,30 C170,10 190,40 200,100 L0,100 Z" fill="%2337b24d"/></svg>');
+            animation-name: forestMove3;
+            height: 80%;
+            z-index: 3;
+        }
+        
+        @keyframes forestMove1 {
+            0% { background-position: 0 0; }
+            100% { background-position: 1000px 0; }
+        }
+        
+        @keyframes forestMove2 {
+            0% { background-position: 0 0; }
+            100% { background-position: 800px 0; }
+        }
+        
+        @keyframes forestMove3 {
+            0% { background-position: 0 0; }
+            100% { background-position: 600px 0; }
+        }
+        
         .chat-container {
             width: 100%;
             max-width: 500px;
-            height: 90vh;
+            height: 95vh;
+            max-height: 800px;
             background-color: rgba(255, 255, 255, 0.95);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
@@ -43,26 +113,45 @@
             overflow: hidden;
             position: relative;
         }
+        
+        @media (max-width: 500px) {
+            .chat-container {
+                height: 100vh;
+                max-height: none;
+                border-radius: 0;
+            }
+            
+            body {
+                padding: 0;
+            }
+        }
+        
         .chat-header {
             background: var(--header-bg);
             color: white;
-            padding: 20px;
+            padding: 15px 20px;
             text-align: center;
             position: relative;
             z-index: 10;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
+        
         .chat-header h1 {
-            font-size: 1.8rem;
+            font-size: 1.4rem;
             font-weight: 700;
             letter-spacing: 0.5px;
             margin-bottom: 5px;
         }
+        
         .chat-header p {
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             opacity: 0.85;
-            margin-top: 5px;
+            margin-top: 3px;
         }
+        
         .status-indicator {
             display: inline-block;
             width: 10px;
@@ -72,47 +161,54 @@
             margin-right: 8px;
             animation: pulse 1.5s infinite;
         }
+        
         @keyframes pulse {
             0% { opacity: 0.6; }
             50% { opacity: 1; }
             100% { opacity: 0.6; }
         }
+        
         .chat-messages {
             flex: 1;
-            padding: 20px;
+            padding: 15px;
             overflow-y: auto;
             background: var(--background);
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
             background-image: radial-gradient(#ddeedd 1px, transparent 1px);
             background-size: 20px 20px;
         }
+        
         .message {
             max-width: 85%;
-            padding: 15px 18px;
+            padding: 12px 16px;
             border-radius: 22px;
             position: relative;
             animation: fadeIn 0.3s ease;
             box-shadow: var(--light-shadow);
-            line-height: 1.5;
-            font-size: 1.02rem;
+            line-height: 1.4;
+            font-size: 1rem;
             word-wrap: break-word;
             transition: transform 0.2s;
         }
+        
         .message:hover {
             transform: translateY(-2px);
         }
+        
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
         .user-message {
             align-self: flex-end;
             background: var(--user-message);
             color: white;
             border-bottom-right-radius: 8px;
         }
+        
         .bot-message {
             align-self: flex-start;
             background: var(--bot-message);
@@ -120,14 +216,16 @@
             border: 1px solid #e0e0e0;
             border-bottom-left-radius: 8px;
         }
+        
         .chat-input-area {
             display: flex;
-            padding: 15px;
+            padding: 12px;
             background: var(--input-bg);
             border-top: 1px solid #e0e0e0;
             position: relative;
             z-index: 10;
         }
+        
         .chat-input {
             flex: 1;
             display: flex;
@@ -136,57 +234,250 @@
             overflow: hidden;
             box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
         }
+        
         .chat-input input {
             flex: 1;
-            padding: 14px 20px;
+            padding: 12px 18px;
             border: none;
             background: transparent;
             outline: none;
             font-size: 1rem;
             color: #333;
         }
+        
         .chat-input input::placeholder {
             color: #888;
         }
+        
         .chat-input button {
             background: var(--secondary-gradient);
             color: white;
             border: none;
-            padding: 0 25px;
+            padding: 0 20px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s;
+            min-width: 60px;
         }
+        
         .chat-input button:hover {
             opacity: 0.9;
         }
+        
         .chat-input button i {
             font-size: 1.2rem;
+        }
+        
+        /* Typing indicator */
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: var(--bot-message);
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 8px;
+            padding: 12px 16px;
+            max-width: 85%;
+            box-shadow: var(--light-shadow);
+        }
+        
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            float: left;
+            margin: 0 2px;
+            background-color: #9E9EA1;
+            display: block;
+            border-radius: 50%;
+            opacity: 0.4;
+        }
+        
+        .typing-indicator span:nth-of-type(1) {
+            animation: typing 1s infinite;
+        }
+        
+        .typing-indicator span:nth-of-type(2) {
+            animation: typing 1s infinite 0.2s;
+        }
+        
+        .typing-indicator span:nth-of-type(3) {
+            animation: typing 1s infinite 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); opacity: 1; }
+        }
+        
+        /* Scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: rgba(221, 238, 221, 0.5);
+            border-radius: 10px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background-color: #a8d5ba;
+            border-radius: 10px;
         }
     </style>
 </head>
 <body>
+    <div id="forest-background">
+        <div class="forest-layer layer-1"></div>
+        <div class="forest-layer layer-2"></div>
+        <div class="forest-layer layer-3"></div>
+    </div>
+    
     <div class="chat-container">
         <div class="chat-header">
             <h1><span class="status-indicator"></span> iPhone Pro Assistant</h1>
             <p>Ваш персональный AI-консультант по iPhone</p>
         </div>
         <div class="chat-messages" id="chat-messages">
-            <div class="welcome-message">
-                <p>Добро пожаловать! Я помогу вам выбрать идеальный iPhone</p>
-                <div class="product-suggestion">
-                    <div class="suggestion-chip">iPhone 15 Pro</div>
-                    <div class="suggestion-chip">iPhone 14</div>
-                    <div class="suggestion-chip">iPhone 13 mini</div>
-                </div>
+            <div class="typing-indicator" id="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
             </div>
         </div>
         <div class="chat-input-area">
             <div class="chat-input">
-                <input type="text" id="user-input" placeholder="Напишите сообщение...">
+                <input type="text" id="user-input" placeholder="Напишите сообщение..." autocomplete="off">
                 <button id="send-btn"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
     </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const chatMessages = document.getElementById('chat-messages');
+            const userInput = document.getElementById('user-input');
+            const sendBtn = document.getElementById('send-btn');
+            const typingIndicator = document.getElementById('typing-indicator');
+            
+            let sessionId = null;
+            
+            // Initialize chat session
+            async function initChat() {
+                try {
+                    const response = await fetch('/start_chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    sessionId = data.session_id;
+                    console.log('Chat session started:', sessionId);
+                    
+                    // Show initial welcome message
+                    addMessage('bot', 'Добро пожаловать! Я ваш помощник по iPhone. Чем могу помочь?');
+                    
+                } catch (error) {
+                    console.error('Error starting chat:', error);
+                    addMessage('bot', 'Не удалось инициализировать чат. Пожалуйста, обновите страницу.');
+                }
+            }
+            
+            // Add message to chat
+            function addMessage(sender, text) {
+                // Hide typing indicator when message arrives
+                typingIndicator.style.display = 'none';
+                
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message');
+                messageElement.classList.add(sender + '-message');
+                
+                // Format text with basic HTML support
+                const formattedText = text
+                    .replace(/\n/g, '<br>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/_(.*?)_/g, '<em>$1</em>');
+                
+                messageElement.innerHTML = formattedText;
+                chatMessages.appendChild(messageElement);
+                
+                // Scroll to bottom
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            
+            // Show typing indicator
+            function showTyping() {
+                typingIndicator.style.display = 'flex';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            
+            // Hide typing indicator
+            function hideTyping() {
+                typingIndicator.style.display = 'none';
+            }
+            
+            // Send message to server
+            async function sendMessage() {
+                const message = userInput.value.trim();
+                if (!message) return;
+                
+                // Add user message to chat
+                addMessage('user', message);
+                userInput.value = '';
+                
+                // Show typing indicator
+                showTyping();
+                
+                try {
+                    const response = await fetch('/send_message', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            session_id: sessionId,
+                            message: message
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        addMessage('bot', 'Ошибка: ' + data.error);
+                    } else if (data.messages) {
+                        // Handle multiple initial messages
+                        data.messages.forEach(msg => {
+                            addMessage('bot', msg);
+                        });
+                    } else if (data.message) {
+                        addMessage('bot', data.message);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    addMessage('bot', 'Не удалось отправить сообщение. Пожалуйста, попробуйте снова.');
+                } finally {
+                    hideTyping();
+                }
+            }
+            
+            // Event listeners
+            sendBtn.addEventListener('click', sendMessage);
+            
+            userInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+            
+            // Auto-focus input on load
+            userInput.focus();
+            
+            // Initialize chat
+            initChat();
+        });
+    </script>
 </body>
 </html>
