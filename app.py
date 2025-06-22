@@ -129,6 +129,7 @@ class UserState:
         self.current_order_step = None
         self.greeted = False
         self.order_intent_detected = False
+        self.initial_messages_sent = False  # Track if initial messages have been sent
 
 
 user_states = {}
@@ -677,17 +678,12 @@ def start_chat():
     session_id = str(uuid.uuid4())
     user_states[session_id] = UserState()
     chat_histories[session_id] = []
-    user_states[session_id].greeted = True
     
     # Preload products to warm up cache
     get_available_products()
     
-    # Create messages array with greeting + all details texts
-    messages = [greeting_text] + details_texts
-    
     return jsonify({
-        "session_id": session_id, 
-        "messages": messages
+        "session_id": session_id
     })
 
 
@@ -723,6 +719,18 @@ def send_message():
         user_state.context_cut = True
     elif len(chat_history) > MAX_CONTEXT and not user_state.context_cut:
         chat_history.pop(0)
+
+    # Check if we need to send initial messages
+    if not user_state.initial_messages_sent:
+        user_state.initial_messages_sent = True
+        initial_messages = [greeting_text] + details_texts
+        
+        # Add initial messages to chat history
+        for msg in initial_messages:
+            chat_history.append({"role": "assistant", "content": msg})
+        
+        # Return initial messages without processing user input
+        return jsonify({"messages": initial_messages})
 
     # Route to appropriate handler
     if user_state.phase == "init":
