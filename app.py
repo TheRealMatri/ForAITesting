@@ -65,8 +65,13 @@ def load_txt(filename):
         return ""
 
 
+# Load multiple details files
 greeting_text = load_txt('greeting.txt') or "Привет! Я ваш помощник по iPhone. Чем могу помочь?"
-details_text = load_txt('details.txt') or "У нас есть широкий выбор iPhone по отличным ценам!"
+details_texts = [
+    load_txt('details1.txt') or "У нас есть широкий выбор iPhone по отличным ценам!",
+    load_txt('details2.txt') or "Все устройства проходят тщательную проверку перед продажей.",
+    load_txt('details3.txt') or "Мы предлагаем гарантию на все устройства и бесплатную доставку."
+]
 delivery_options_text = load_txt('delivery_options.txt') or "Выберите способ доставки:\n1. Самовывоз\n2. Курьерская доставка"
 office_closed_text = load_txt('office_closed_response.txt') or (
     "Наш офис сейчас закрыт. Хотите оформить доставку?"
@@ -538,9 +543,13 @@ def start_chat():
     user_states[session_id] = UserState()
     chat_histories[session_id] = []
     user_states[session_id].greeted = True
+    
+    # Create messages array with greeting + all details texts
+    messages = [greeting_text] + details_texts
+    
     return jsonify({
         "session_id": session_id, 
-        "messages": [greeting_text, details_text]
+        "messages": messages
     })
 
 
