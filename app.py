@@ -549,6 +549,28 @@ def submit_order(data):
         return False
 
 
+def clean_ai_response(text):
+    """Remove internal thinking tags and prefixes from AI responses"""
+    # Remove <think> tags and content
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    
+    # Remove internal thinking prefixes
+    prefixes = [
+        "Хм,", "Хорошо,", "Итак,", "Окей,", "Ладно,",
+        "Хм ", "Хорошо ", "Итак ", "Окей ", "Ладно ",
+        "Похоже", "Наверное", "Стоит", "Надо"
+    ]
+    
+    for prefix in prefixes:
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+            
+    # Remove any remaining prefix-like patterns
+    text = re.sub(r'^(Хм,?|Хорошо,?|Итак,?|Окей,?|Ладно,?)\s*', '', text, flags=re.IGNORECASE)
+    
+    return text.strip()
+
+
 def generate_llama_response(prompt):
     url = "https://api.together.xyz/v1/chat/completions"
     headers = {
@@ -577,13 +599,13 @@ def generate_llama_response(prompt):
             response = requests.post(url, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"].strip()
-            logger.info(f"AI response: {content}")
+            logger.info(f"Raw AI response: {content}")
             
-            # Remove any internal thinking prefixes
-            if content.startswith("Хорошо,") or content.startswith("Итак,"):
-                content = re.sub(r'^(Хорошо, |Итак, |Окей, )', '', content)
+            # Clean response from internal thoughts
+            cleaned_content = clean_ai_response(content)
+            logger.info(f"Cleaned AI response: {cleaned_content}")
             
-            return content
+            return cleaned_content
         except requests.exceptions.HTTPError as e:
             if response.status_code == 429:  # Rate limit
                 logger.warning(f"Rate limit exceeded. Retrying in {retry_delay} seconds...")
@@ -604,6 +626,17 @@ def generate_llama_response(prompt):
 
 def classify_order_intent(user_input, context):
     """Use NLP to determine if user wants to start an order"""
+    # First check for explicit order keywords
+    order_keywords = [
+        "хочу купить", "хочу заказать", "закажите", "оформить заказ",
+        "куплю", "заказ", "заказать", "оформить", "доставка", "оплата",
+        "купить", "приобрести", "хочу приобрести", "заказал"
+    ]
+    
+    if any(keyword in user_input.lower() for keyword in order_keywords):
+        return True
+    
+    # Then use AI for context-aware classification
     prompt = f"""
     [КОНТЕКСТ]: {context}
     [СООБЩЕНИЕ]: {user_input}
@@ -615,6 +648,22 @@ def classify_order_intent(user_input, context):
     
     response = generate_llama_response(prompt)
     return "заказ" in response.lower()
+
+
+def build_context_history(chat_history, max_messages=4):
+    """Build context string from chat history"""
+    context_parts = []
+    count = 0
+    for msg in reversed(chat_history):
+        if msg["role"] == "user":
+            context_parts.insert(0, f"Клиент: {msg['content']}")
+            count += 1
+        elif msg["role"] == "assistant":
+            context_parts.insert(0, f"Консультант: {msg['content']}")
+            count += 1
+        if count >= max_messages:
+            break
+    return "\n".join(context_parts)
 
 
 # New routes for web chat interface
@@ -734,43 +783,41 @@ def handle_product_inquiry(user_input, user_state, session_id):
     user_state.greeted = True
     
     # Get conversation context
-    prev_messages = chat_histories.get(session_id, [])
-    context = " ".join(
-        [msg['content'] for msg in prev_messages[-4:] if msg['role'] == 'user']
-    )
+    chat_history = chat_histories.get(session_id, [])
+    context = build_context_history(chat_history)
     
     # Advanced NLP intent recognition
     wants_to_order = classify_order_intent(user_input, context)
     
-    if wants_to_order and not user_state.order_intent_detected:
+    # Check for explicit order requests
+    if (wants_to_order or 
+        any(word in user_input.lower() for word in ["хочу купить", "хочу заказать"])):
+        user_state.order_intent_detected = True
+        
         # Extract mentioned model from context
         mentioned_models = extract_models_from_input(context + " " + user_input)
         if mentioned_models:
             model = mentioned_models[0]
             user_state.order_data["Модель"] = model
-            user_state.order_intent_detected = True
             user_state.phase = "order_confirmation"
             return f"Вы хотите заказать {model}? (Да/Нет)"
         else:
-            user_state.order_intent_detected = True
-            return "Какую модель iPhone вы хотели бы заказать?"
+            user_state.phase = "order_confirmation"
+            return "Отлично! Какую модель iPhone вы хотели бы заказать?"
 
     products = get_available_products()
     available_models = get_available_models(products)
-    prev_messages = chat_histories.get(session_id, [])
-
-    is_follow_up = any(
-        msg['content'].lower() in user_input.lower()
-        for msg in prev_messages[-2:]
-        if msg['role'] == 'assistant'
-    )
 
     # Create a concise list of available models for the prompt
     models_list = ", ".join(available_models[:5])  # Show first 5 models
     if len(available_models) > 5:
         models_list += f" и ещё {len(available_models)-5} моделей"
 
+    # Build context-aware prompt
     prompt = f"""
+    [КОНТЕКСТ РАЗГОВОРА]
+    {context}
+    
     [ИНСТРУКЦИИ]
     Ты консультант магазина. Отвечай только готовым ответом для клиента без внутренних размышлений.
     Отвечай на русском. Только готовым ответом для клиента без внутренних размышлений!
@@ -785,8 +832,8 @@ def handle_product_inquiry(user_input, user_state, session_id):
 
     ai_response = generate_llama_response(prompt)
 
+    # Check if we should ask about details
     if (not user_state.greeted and
-            not is_follow_up and
             not any(word in user_input.lower() for word in ["нет", "не надо"]) and
             any(model.lower() in user_input.lower() for model in ["iphone", "айфон"])):
         user_state.phase = "product_info"
@@ -829,12 +876,19 @@ def handle_product_info_response(user_input, user_state, session_id):
     products = get_available_products()
     available_models = get_available_models(products)
 
+    # Build context
+    chat_history = chat_histories.get(session_id, [])
+    context = build_context_history(chat_history)
+
     # Create a concise list of available models for the prompt
     models_list = ", ".join(available_models[:5])  # Show first 5 models
     if len(available_models) > 5:
         models_list += f" и ещё {len(available_models)-5} моделей"
 
     prompt = f"""
+    [КОНТЕКСТ РАЗГОВОРА]
+    {context}
+    
     [ИНСТРУКЦИИ]
     Отвечай на русском. Только готовым ответом для клиента без внутренних размышлений!
     Ты эксперт по iPhone. Предоставь краткую информацию о модели без внутренних размышлений.
@@ -849,7 +903,8 @@ def handle_product_info_response(user_input, user_state, session_id):
 
     ai_response = generate_llama_response(prompt)
 
-    if "Хотите оформить заказ" not in ai_response and not user_state.asked_for_details:
+    # Add order prompt if not already present
+    if "Хотите оформить заказ" not in ai_response:
         ai_response += "\n\nХотите оформить заказ на эту модель?"
         user_state.asked_for_details = True
 
