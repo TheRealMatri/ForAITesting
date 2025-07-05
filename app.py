@@ -14,7 +14,6 @@ import logging
 import difflib
 import uuid
 import time
-from collections import deque
 
 # Configure logging
 logging.basicConfig(
@@ -25,10 +24,8 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-
 TOGETHER_API_KEY = os.getenv("API")
 PRODUCT_SHEET_URL = os.getenv("PRODUCT_SHEET_URL")
-OFFICE_STATUS_SHEET_URL = os.getenv("OFFICE_STATUS_SHEET_URL")
 ORDER_SHEET_URL = os.getenv("ORDER_SHEET_URL")
 SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
 
@@ -36,21 +33,15 @@ SERVICE_ACCOUNT_JSON = os.getenv("SERVICE_ACCOUNT_JSON")
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "https://sitetest-76es.onrender.com "}})
 
-# Rate limiting configuration
-AI_REQUEST_INTERVAL = 1.0  # 1 request per second
-last_request_time = 0.0
-request_lock = False
-
 # Google Sheets Setup
 scopes = ['https://www.googleapis.com/auth/spreadsheets ']
 service_account_info = None
 gc = None
 product_sheet = None
-office_sheet = None
 order_sheet = None
 
 def initialize_google_sheets():
-    global service_account_info, gc, product_sheet, office_sheet, order_sheet
+    global service_account_info, gc, product_sheet, order_sheet
     try:
         # Parse service account JSON from environment variable
         service_account_info = json.loads(SERVICE_ACCOUNT_JSON)
@@ -59,13 +50,13 @@ def initialize_google_sheets():
             scopes=scopes
         )
         gc = gspread.authorize(credentials)
+        
         # Initialize sheets with retry logic
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 # Open by URL with error handling
                 product_sheet = gc.open_by_url(PRODUCT_SHEET_URL).sheet1
-                office_sheet = gc.open_by_url(OFFICE_STATUS_SHEET_URL).sheet1
                 order_sheet = gc.open_by_url(ORDER_SHEET_URL).sheet1
                 logger.info("Successfully connected to Google Sheets")
                 return True
@@ -108,13 +99,11 @@ details_texts = [
     load_txt('details2.txt') or "Все устройства проходят тщательную проверку перед продажей.",
     load_txt('details3.txt') or "Мы предлагаем гарантию на все устройства и бесплатную доставку."
 ]
+
 delivery_options_text = load_txt('delivery_options.txt') or (
     "Выберите способ доставки:\n"
     "1. Самовывоз\n"
     "2. Курьерская доставка"
-)
-office_closed_text = load_txt('office_closed_response.txt') or (
-    "Наш офис сейчас закрыт. Хотите оформить доставку?"
 )
 
 # State Management
@@ -139,32 +128,24 @@ class UserState:
         self.greeted = False
         self.order_intent_detected = False
         self.initial_messages_sent = False  # Track if initial messages have been sent
-        self.conversation_history = []  # Enhanced conversation history
 
 user_states = {}
 chat_histories = {}
 MAX_CONTEXT = 20
 SESSION_TIMEOUT = timedelta(minutes=45)
 
-# Enhanced model patterns with better variations
 MODEL_PATTERNS = {
-    'pro': ['pro', 'про', 'рго', 'прo', 'пpo', 'professional'],
-    'max': ['max', 'макс', 'маx', 'мaкс', 'максимум'],
+    'pro': ['pro', 'про', 'рго', 'прo', 'пpo'],
+    'max': ['max', 'макс', 'маx', 'мaкс', 'мax'],
     'mini': ['mini', 'мини', 'минь', 'миni', 'мин'],
     'plus': ['plus', 'плюс', 'плс', 'pls', 'плю'],
-    'standard': ['', 'стандарт', 'обычный', 'базовый', 'base'],
-    'promax': ['promax', 'pro max', 'про макс', 'промакс', 'pro макс']
+    'standard': ['', 'стандарт', 'обычный', 'базовый']
 }
 
 MODEL_NUMBER_PATTERN = r'(?<!\d)(1[1-6]|\d{1,2})(?!\d)'
-STORAGE_VARIANTS = {
-    '1tb': ['1tb', '1t', '1 тб', '1024gb', '1024 гб'],
-    '512gb': ['512gb', '512 гб', '512гб'],
-    '256gb': ['256gb', '256 гб', '256гб'],
-    '128gb': ['128gb', '128 гб', '128гб'],
-    '64gb': ['64gb', '64 гб', '64гб'],
-    '32gb': ['32gb', '32 гб', '32гб']
-}
+last_request_time = 0
+AI_REQUEST_INTERVAL = 1  # 1 request per second
+request_lock = False
 
 def is_available(availability_str):
     if not availability_str:
@@ -187,8 +168,9 @@ def cleanup_expired_sessions():
 def normalize_model_name(model_name):
     if not model_name:
         return ""
-    
-    model = model_name.lower().translate(str.maketrans('', '', string.punctuation))
+    model = model_name.lower().translate(
+        str.maketrans('', '', string.punctuation)
+    )
     replacements = {
         'айфон': 'iphone',
         'iphone': '',
@@ -213,15 +195,12 @@ def normalize_model_name(model_name):
         'min': 'mini',
         'pro max': 'promax'
     }
-    
     for key, value in replacements.items():
         model = model.replace(key, value)
     
-    # Extract model number
     model_number_match = re.search(MODEL_NUMBER_PATTERN, model)
     model_number = model_number_match.group(0) if model_number_match else ""
     
-    # Detect variant
     variant = ""
     for var_type, patterns in MODEL_PATTERNS.items():
         for pattern in patterns:
@@ -244,35 +223,23 @@ def normalize_model_name(model_name):
 def normalize_storage(storage):
     if not storage:
         return ""
-    
     if isinstance(storage, str):
         storage = storage.lower()
-        
         # Handle TB conversions
         if 'tb' in storage or 'тб' in storage:
             storage_num = re.sub(r'[^0-9]', '', storage)
             if storage_num == "1024" or storage_num == "1":
                 return "1TB"
             return f"{storage_num}TB"
-            
         storage_num = re.sub(r'[^0-9]', '', storage)
         if storage_num == "1024":
             return "1TB"
-            
-        # Check for variants
-        for canonical, variants in STORAGE_VARIANTS.items():
-            if storage_num:
-                if any(var in storage for var in variants):
-                    return canonical.upper()
-        
         return f"{storage_num} ГБ" if storage_num else ""
-    
     return f"{storage} ГБ"
 
 def normalize_color(color):
     if not color:
         return ""
-    
     color = color.lower()
     color_map = {
         'space gray': 'серый',
@@ -307,19 +274,15 @@ def normalize_color(color):
         'белый титан': 'белый титан',
         'чёрный титан': 'чёрный титан',
     }
-    
     if color in color_map:
         return color_map[color]
-        
     best_match = None
     best_score = 0
-    
     for key in color_map:
         score = jellyfish.jaro_similarity(color, key)
         if score > 0.85 and score > best_score:
             best_match = key
             best_score = score
-            
     return color_map[best_match] if best_match else color
 
 def find_matching_products(products, model=None, storage=None, color=None):
@@ -327,12 +290,10 @@ def find_matching_products(products, model=None, storage=None, color=None):
     for product in products:
         if not is_available(product.get('Наличие', '')):
             continue
-            
         match_score = 0
         if model:
             input_norm = normalize_model_name(model)
             product_norm = normalize_model_name(product.get('Модель', ''))
-            
             if input_norm == product_norm:
                 match_score += 100
             elif input_norm in product_norm or product_norm in input_norm:
@@ -340,29 +301,22 @@ def find_matching_products(products, model=None, storage=None, color=None):
             else:
                 input_nums = set(re.findall(r'\d+', input_norm))
                 product_nums = set(re.findall(r'\d+', product_norm))
-                
                 if input_nums and input_nums.issubset(product_nums):
                     match_score += 50
                 elif input_nums and product_nums and input_nums == product_nums:
                     match_score += 40
-                    
         if storage:
             input_norm = normalize_storage(storage)
             product_norm = normalize_storage(product.get('Объём', ''))
-            
             if input_norm == product_norm:
                 match_score += 20
-                
         if color:
             input_norm = normalize_color(color)
             product_norm = normalize_color(product.get('Цвет', ''))
-            
             if input_norm == product_norm:
                 match_score += 10
-                
         if (model or storage or color) and match_score >= 50:
             results.append((product, match_score))
-            
     results.sort(key=lambda x: x[1], reverse=True)
     return [item[0] for item in results]
 
@@ -373,7 +327,7 @@ def get_available_products():
     if (PRODUCT_CACHE and PRODUCT_CACHE_TIME and 
         (now - PRODUCT_CACHE_TIME).seconds < CACHE_DURATION):
         return PRODUCT_CACHE
-        
+    
     try:
         products = product_sheet.get_all_records()
         # Convert 1024 GB to 1TB and handle other storage formats
@@ -382,29 +336,23 @@ def get_available_products():
             normalized = normalize_storage(storage)
             if normalized != storage:
                 product['Объём'] = normalized
-                
         PRODUCT_CACHE = products
         PRODUCT_CACHE_TIME = now
         logger.info(f"Loaded {len(products)} products from Google Sheets")
-        
         if products:
             logger.info(f"Sample product: {products[0]}")
-            
         return products
-        
     except Exception as e:
         logger.error(f"Product fetch error: {str(e)}")
         # Try to reinitialize connection
         if "RESOURCE_EXHAUSTED" in str(e) or "UNAUTHENTICATED" in str(e):
             logger.warning("Reinitializing Google Sheets connection")
             initialize_google_sheets()
-            
         return PRODUCT_CACHE or []  # Return stale cache if available
 
 def get_available_models(products=None):
     if products is None:
         products = get_available_products()
-        
     return list(set(
         p['Модель'] for p in products if is_available(p.get('Наличие', ''))
     ))
@@ -428,14 +376,12 @@ def find_similar_models(user_input, available_models):
     user_input_norm = normalize_model_name(user_input)
     suggestions = []
     seen = set()
-    
     for model in available_models:
         norm_model = normalize_model_name(model)
         if user_input_norm in norm_model or norm_model in user_input_norm:
             if model not in seen:
                 suggestions.append(model)
                 seen.add(model)
-                
     if not suggestions:
         numbers = re.findall(r'\d+', user_input)
         if numbers:
@@ -445,7 +391,6 @@ def find_similar_models(user_input, available_models):
                     if model not in seen:
                         suggestions.append(model)
                         seen.add(model)
-                        
     if not suggestions:
         for model in available_models:
             norm_model = normalize_model_name(model)
@@ -458,7 +403,6 @@ def find_similar_models(user_input, available_models):
             if match and model not in seen:
                 suggestions.append(model)
                 seen.add(model)
-                
     if not suggestions:
         similarity_scores = []
         for model in available_models:
@@ -466,10 +410,8 @@ def find_similar_models(user_input, available_models):
             similarity = jellyfish.jaro_similarity(user_input_norm, norm_model)
             if similarity > 0.85:
                 similarity_scores.append((model, similarity))
-                
         similarity_scores.sort(key=lambda x: x[1], reverse=True)
         suggestions = [item[0] for item in similarity_scores]
-        
     if not suggestions:
         suggestions = difflib.get_close_matches(
             user_input,
@@ -477,7 +419,6 @@ def find_similar_models(user_input, available_models):
             n=3,
             cutoff=0.7
         )
-        
     return suggestions[:3]
 
 def format_order_summary(order_data):
@@ -500,7 +441,6 @@ def extract_models_from_input(user_input):
         r'\b(?:айфон|айфона|айфоном)\s*(\d{1,2})\s*(про|макс|мини|плюс)?\b',
         r'\b(?:iphone|айфон)(\d{1,2})\s*(pro\s*max|pro|plus|mini|max)?\b'
     ]
-    
     for pattern in patterns:
         matches = re.findall(pattern, user_input, re.IGNORECASE)
         for match in matches:
@@ -510,20 +450,15 @@ def extract_models_from_input(user_input):
             else:
                 number = match
                 variant = ""
-                
             variant_map = {
                 'мин': 'mini', 'мини': 'mini', 'мии': 'mini',
                 'про': 'pro', 'плюс': 'plus', 'макс': 'max'
             }
-            
             variant = variant_map.get(variant.lower(), variant.lower())
             model_name = f"iPhone {number}"
-            
             if variant:
                 model_name += f" {variant.capitalize()}"
-                
             models.append(model_name)
-            
     seen = set()
     return [m for m in models if not (m in seen or seen.add(m))]
 
@@ -534,18 +469,6 @@ def match_delivery_option(text):
     elif "курьер" in text or "доставк" in text or "привез" in text:
         return "Курьерская доставка"
     return None
-
-def get_office_status():
-    try:
-        records = office_sheet.get_all_records()
-        return records[0]['Состояние'] if records else "Неизвестно"
-    except Exception as e:
-        logger.error(f"Office status error: {str(e)}")
-        # Try to reinitialize connection
-        if "RESOURCE_EXHAUSTED" in str(e) or "UNAUTHENTICATED" in str(e):
-            logger.warning("Reinitializing Google Sheets connection")
-            initialize_google_sheets()
-        return "Неизвестно"
 
 def submit_order(data):
     try:
@@ -578,11 +501,9 @@ def clean_ai_response(text):
         "Хм ", "Хорошо ", "Итак ", "Окей ", "Ладно ",
         "Похоже", "Наверное", "Стоит", "Надо"
     ]
-    
     for prefix in prefixes:
         if text.startswith(prefix):
             text = text[len(prefix):].strip()
-            
     # Remove any remaining prefix-like patterns
     text = re.sub(r'^(Хм,?|Хорошо,?|Итак,?|Окей,?|Ладно,?)\s*', '', text, flags=re.IGNORECASE)
     return text.strip()
@@ -688,7 +609,7 @@ def classify_order_intent(user_input, context):
     return "заказ" in response.lower()
 
 def build_context_history(chat_history, max_messages=4):
-    """Build context string from chat history with enhanced context handling"""
+    """Build context string from chat history"""
     context_parts = []
     count = 0
     for msg in reversed(chat_history):
@@ -771,8 +692,6 @@ def send_message():
         response = handle_product_info_response(user_input, user_state, session_id)
     elif user_state.phase == "delivery_selection":
         response = handle_delivery_selection(user_input, user_state)
-    elif user_state.phase == "office_closed":
-        response = handle_office_closed(user_input, user_state)
     elif user_state.phase == "order_form":
         response = handle_order_form_step(user_input, user_state, session_id)
     elif user_state.phase == "complete":
@@ -957,26 +876,10 @@ def handle_delivery_selection(user_input, user_state):
         
     user_state.delivery_method = delivery
     
-    if delivery == "Самовывоз":
-        office_status = get_office_status()
-        
-        if office_status.lower() in ["закрыт", "closed"]:
-            user_state.phase = "office_closed"
-            return office_closed_text
-            
+    # Always proceed to order form since we removed office status
     user_state.phase = "order_form"
     user_state.current_order_step = "full_name"
     return "Пожалуйста, укажите ваше полное имя (Фамилия Имя Отчество):"
-
-def handle_office_closed(user_input, user_state):
-    if "да" in user_input.lower():
-        user_state.phase = "order_form"
-        user_state.delivery_method = "Курьерская доставка"
-        user_state.current_order_step = "full_name"
-        return "Пожалуйста, укажите ваше полное имя (Фамилия Имя Отчество):"
-    else:
-        user_state.phase = "complete"
-        return "Хорошо, тогда обращайтесь, когда офис будет открыт."
 
 def handle_order_form_step(user_input, user_state, session_id):
     products = get_available_products()
