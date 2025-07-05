@@ -528,7 +528,7 @@ def rate_limited_request():
 def generate_llama_response(prompt):
     rate_limited_request()
     
-    url = "https://api.together.xyz/v1/chat/completions "
+    url = "https://api.together.xyz/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
